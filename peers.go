@@ -7,5 +7,5 @@ type PeerPicker interface {
 }
 
 type PeerGetter interface {
-	Get(in *cachepb.Request, out *cachepb.Response) error //从对应的perrgetter中获取对应group中的对应key的值
+	Get(in *cachepb.GetRequest, out *cachepb.Response) error //从对应的perrgetter中获取对应group中的对应key的值
 }

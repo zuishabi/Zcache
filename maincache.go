@@ -3,6 +3,7 @@ package cache
 import (
 	"cache/cachepb/cachepb"
 	"cache/singleflight"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -24,7 +25,7 @@ func (f GetterFunc) Get(key string) ([]byte, error) {
 
 type Group struct {
 	name      string
-	getter    Getter
+	getter    Getter //用户设定的getter，在找不到对应数据时调用此回调函数在本地数据库中进行查找
 	mainCache cache
 	peers     PeerPicker
 	loader    *singleflight.Group //用来防止缓存穿透
@@ -36,9 +37,6 @@ var (
 )
 
 func NewGroup(name string, cacheBytes int64, getter Getter) *Group {
-	if getter == nil {
-		panic("nil getter")
-	}
 	mu.Lock()
 	defer mu.Unlock()
 	g := &Group{
@@ -66,12 +64,12 @@ func (g *Group) RegisterPeers(peers PeerPicker) {
 	g.peers = peers
 }
 
+// Get 获取数据
 func (g *Group) Get(key string) (ByteView, error) {
 	if key == "" {
 		return ByteView{}, fmt.Errorf("key is required")
 	}
 	if v, ok := g.mainCache.get(key); ok {
-		log.Println("[GeeCache] hit")
 		return v, nil
 	}
 	// 如果在缓存中没有找到对应的数据，则从本地获取，通过用户设置的回调函数
@@ -100,7 +98,7 @@ func (g *Group) load(key string) (value ByteView, err error) {
 
 // 从远程节点获得对应组的数据
 func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
-	req := &cachepb.Request{
+	req := &cachepb.GetRequest{
 		Group: g.name,
 		Key:   key,
 	}
@@ -114,6 +112,9 @@ func (g *Group) getFromPeer(peer PeerGetter, key string) (ByteView, error) {
 
 // 通过用户设定的getter函数从源数据中获得数据，并放入缓存中
 func (g *Group) getLocally(key string) (ByteView, error) {
+	if g.getter == nil {
+		return ByteView{}, errors.New("FoundNoData")
+	}
 	bytes, err := g.getter.Get(key)
 	if err != nil {
 		return ByteView{}, err
@@ -125,4 +126,24 @@ func (g *Group) getLocally(key string) (ByteView, error) {
 
 func (g *Group) populateCache(key string, value ByteView) {
 	g.mainCache.add(key, value)
+}
+
+// Set 设置数据
+func (g *Group) Set(key string, value []byte) {
+	//TODO 设置分布式节点的设置数据
+	g.mainCache.add(key, ByteView{b: value})
+}
+
+// GetGroupList 获得group列表
+func GetGroupList() []string {
+	res := make([]string, 0)
+	for i, _ := range groups {
+		res = append(res, i)
+	}
+	return res
+}
+
+// GetGroupKeyList 获得一个组中所有的键
+func (g *Group) GetGroupKeyList() []string {
+	return g.mainCache.lru.GetKeyList()
 }

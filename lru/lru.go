@@ -1,7 +1,10 @@
 // Package lru 缓存淘汰策略
 package lru
 
-import "container/list"
+import (
+	"container/list"
+	"fmt"
+)
 
 type Cache struct {
 	maxBytes int64 //允许使用的最大内存
@@ -39,6 +42,7 @@ func (c *Cache) Get(key string) (value Value, ok bool) {
 		kv := ele.Value.(*entry)
 		return kv.value, true
 	}
+	fmt.Println(c.cache)
 	return
 }
 
@@ -76,4 +80,16 @@ func (c *Cache) Add(key string, value Value) {
 // Len the number of cache entries
 func (c *Cache) Len() int {
 	return c.ll.Len()
+}
+
+// GetKeyList 获得所有键的列表
+func (c *Cache) GetKeyList() []string {
+	if c == nil {
+		return nil
+	}
+	res := make([]string, 0)
+	for _, v := range c.cache {
+		res = append(res, v.Value.(*entry).key)
+	}
+	return res
 }
