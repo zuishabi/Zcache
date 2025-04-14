@@ -147,7 +147,7 @@ type HttpGetter struct {
 
 func (h *HttpGetter) Get(in *cachepb.GetRequest, out *cachepb.Response) error {
 	u := fmt.Sprintf(
-		"%v/%v/?key=%v&group=%v",
+		"%v/%v?key=%v&group=%v",
 		h.BaseURL,
 		"GetData",
 		url.QueryEscape(in.GetKey()),

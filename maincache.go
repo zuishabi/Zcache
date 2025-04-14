@@ -5,11 +5,85 @@ import (
 	"cache/singleflight"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
+	"io"
 	"log"
+	"os"
 	"sync"
 )
 
 //负责与外部交互，控制缓存存储和获取的主流程
+
+type groupInfo struct {
+	Name       []string `yaml:"name"`
+	CacheBytes []int64  `yaml:"cache-bytes"`
+}
+
+// LoadGroups 加载组文件，将组信息导入
+func LoadGroups() {
+	fmt.Println("loading groups info...")
+	f, err := os.OpenFile("groups.yml", os.O_RDWR, 0644)
+	if err != nil {
+		//未找到对应文件，创建新文件
+		f, err = os.Create("groups.yml")
+		if err != nil {
+			panic(err)
+		}
+		data, err := yaml.Marshal(groupInfo{
+			Name:       []string{"default"},
+			CacheBytes: []int64{2048},
+		})
+		if err != nil {
+			panic(err)
+		}
+		if _, err := f.Write(data); err != nil {
+			panic(err)
+		}
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		panic(err)
+	}
+	g := groupInfo{}
+	if err := yaml.Unmarshal(data, &g); err != nil {
+		panic(err)
+	}
+	if len(g.Name) != len(g.CacheBytes) {
+		panic(errors.New("wrong groups file"))
+	}
+	for i := range len(g.Name) {
+		NewGroup(g.Name[i], g.CacheBytes[i], nil)
+	}
+	defer f.Close()
+}
+
+func UpdateGroupInfo() {
+	mu.Lock()
+	defer mu.Unlock()
+	g := groupInfo{
+		Name:       make([]string, len(groups)),
+		CacheBytes: make([]int64, len(groups)),
+	}
+	i := 0
+	for _, v := range groups {
+		g.Name[i] = v.name
+		g.CacheBytes[i] = v.mainCache.cacheBytes
+		i += 1
+	}
+	f, err := os.OpenFile("groups.yml", os.O_RDWR, 0644)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	data, err := yaml.Marshal(g)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if _, err := f.Write(data); err != nil {
+		fmt.Println(err)
+	}
+}
 
 // Getter 获取对应key的数据
 type Getter interface {
@@ -136,6 +210,8 @@ func (g *Group) Set(key string, value []byte) {
 
 // GetGroupList 获得group列表
 func GetGroupList() []string {
+	mu.Lock()
+	defer mu.Unlock()
 	res := make([]string, 0)
 	for i, _ := range groups {
 		res = append(res, i)
@@ -145,5 +221,13 @@ func GetGroupList() []string {
 
 // GetGroupKeyList 获得一个组中所有的键
 func (g *Group) GetGroupKeyList() []string {
-	return g.mainCache.lru.GetKeyList()
+	return g.mainCache.getKeyList()
+}
+
+// SaveGroup 将组中的数据进行数据持久化
+func (g *Group) SaveGroup(f *os.File) error {
+	if _, err := f.WriteString(g.name + "\n"); err != nil {
+		return err
+	}
+	return g.mainCache.saveCache(f)
 }

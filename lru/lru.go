@@ -79,6 +79,9 @@ func (c *Cache) Add(key string, value Value) {
 
 // Len the number of cache entries
 func (c *Cache) Len() int {
+	if c == nil {
+		return 0
+	}
 	return c.ll.Len()
 }
 
