@@ -15,9 +15,9 @@ type Cache struct {
 	OnEvicted func(key string, value Value)
 }
 
-type entry struct {
-	key   string
-	value Value
+type Entry struct {
+	Key   string
+	Value Value
 }
 
 // Value use Len to count how many bytes it takes
@@ -39,8 +39,8 @@ func New(maxByte int64, onEvicted func(key string, value Value)) *Cache {
 func (c *Cache) Get(key string) (value Value, ok bool) {
 	if ele, ok := c.cache[key]; ok {
 		c.ll.MoveToFront(ele)
-		kv := ele.Value.(*entry)
-		return kv.value, true
+		kv := ele.Value.(*Entry)
+		return kv.Value, true
 	}
 	fmt.Println(c.cache)
 	return
@@ -51,12 +51,12 @@ func (c *Cache) RemoveOldest() {
 	ele := c.ll.Back()
 	if ele != nil {
 		c.ll.Remove(ele)
-		kv := ele.Value.(*entry)
-		delete(c.cache, kv.key)
-		c.nbytes -= int64(len(kv.key)) + int64(kv.value.Len())
+		kv := ele.Value.(*Entry)
+		delete(c.cache, kv.Key)
+		c.nbytes -= int64(len(kv.Key)) + int64(kv.Value.Len())
 		//如果回调函数不为nil，则调用回调函数
 		if c.OnEvicted != nil {
-			c.OnEvicted(kv.key, kv.value)
+			c.OnEvicted(kv.Key, kv.Value)
 		}
 	}
 }
@@ -64,17 +64,29 @@ func (c *Cache) RemoveOldest() {
 func (c *Cache) Add(key string, value Value) {
 	if ele, ok := c.cache[key]; ok {
 		c.ll.MoveToFront(ele)
-		kv := ele.Value.(*entry)
-		c.nbytes += int64(value.Len()) - int64(kv.value.Len())
-		kv.value = value
+		kv := ele.Value.(*Entry)
+		c.nbytes += int64(value.Len()) - int64(kv.Value.Len())
+		kv.Value = value
 	} else {
-		ele := c.ll.PushFront(&entry{key, value})
+		ele := c.ll.PushFront(&Entry{key, value})
 		c.cache[key] = ele
 		c.nbytes += int64(len(key)) + int64(value.Len())
 	}
 	for c.maxBytes != 0 && c.maxBytes < c.nbytes {
 		c.RemoveOldest()
 	}
+}
+
+// Delete 删除对应键的值
+func (c *Cache) Delete(key string) bool {
+	ele := c.cache[key]
+	if ele == nil {
+		return false
+	}
+	delete(c.cache, key)
+	c.ll.Remove(ele)
+	c.nbytes += int64(ele.Value.(*Entry).Value.Len()) + int64(len(key))
+	return true
 }
 
 // Len the number of cache entries
@@ -92,7 +104,18 @@ func (c *Cache) GetKeyList() []string {
 	}
 	res := make([]string, 0)
 	for _, v := range c.cache {
-		res = append(res, v.Value.(*entry).key)
+		res = append(res, v.Value.(*Entry).Key)
+	}
+	return res
+}
+
+// GetKVList 用于返回当前内存中所有的键值对，用于快速批量获取缓存内容
+func (c *Cache) GetKVList() []Entry {
+	res := make([]Entry, c.Len())
+	i := 0
+	for e := c.ll.Front(); e != nil; e = e.Next() {
+		res[i] = *e.Value.(*Entry)
+		i++
 	}
 	return res
 }

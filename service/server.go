@@ -1,16 +1,13 @@
 package service
 
 import (
-	"bufio"
 	"cache"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -45,7 +42,7 @@ func (s *Server) Run() {
 	//加载组文件
 	cache.LoadGroups()
 	if s.persistence {
-		LoadPersistence()
+		cache.LoadPersistence()
 		go s.savePersistence(&wg)
 	}
 	go ListenSignal(&wg)
@@ -62,67 +59,13 @@ func (s *Server) savePersistence(wg *sync.WaitGroup) {
 		select {
 		case <-c:
 			//当程序退出时再进行一次保存
-			save()
+			cache.SavePersistence()
 			return
 		case <-time.After(time.Second * time.Duration(s.persistenceTime)):
 			//当倒计时结束时进行一次保存
-			save()
+			cache.SavePersistence()
 		}
 	}
-}
-
-// 将数据进行保存
-func save() {
-	fmt.Println("saving the persistence file...")
-	f, err := os.OpenFile("persistence.zsave", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	for _, v := range cache.GetGroupList() {
-		g := cache.GetGroup(v)
-		if err := g.SaveGroup(f); err != nil {
-			panic(err)
-		}
-	}
-	fmt.Println("saving complete")
-}
-
-// LoadPersistence 加载持久化文件
-func LoadPersistence() {
-	fmt.Println("loading persistence file")
-	f, err := os.OpenFile("persistence.zsave", os.O_RDWR, 0644)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		groupName := scanner.Text()
-		g := cache.GetGroup(groupName)
-		scanner.Scan()
-		l, err := strconv.Atoi(scanner.Text())
-		if err != nil {
-			panic(err)
-		}
-		if g == nil {
-			fmt.Println("doesn't find group", groupName)
-			scanner.Scan()
-			for _ = range l {
-				scanner.Scan()
-			}
-			continue
-		}
-		for _ = range l {
-			scanner.Scan()
-			kv := strings.Split(scanner.Text(), " ")
-			if len(kv) != 2 {
-				panic(errors.New("persistence file error,wrong key value info"))
-			}
-			g.Set(kv[0], []byte(kv[1]))
-		}
-	}
-	fmt.Println("load persistence file complete")
 }
 
 // ListenSignal 监听信号2，15，当收到信号时关闭reader

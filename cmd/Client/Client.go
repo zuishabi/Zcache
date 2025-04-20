@@ -77,8 +77,9 @@ func commandExplainer(input string) {
 		if explainOneCommand(words[0]) {
 			return
 		}
-		explainUsage(words[0])
-		return
+		if explainUsage(words[0]) {
+			return
+		}
 	}
 	switch words[0] {
 	case "createGroup":
@@ -116,12 +117,33 @@ func commandExplainer(input string) {
 		} else if inputLen == 2 {
 			in.Group = "default"
 			in.Key = words[1]
+		} else {
+			showError(errors.New("unexpected command,use get to see the usage"))
+			return
 		}
 		out := cachepb.Response{}
 		if err := client.Get(&in, &out); err != nil {
 			showError(err)
 		} else {
 			fmt.Println(string(out.Value))
+		}
+	case "delete":
+		in := cachepb.DeleteRequest{}
+		if inputLen == 2 {
+			in.Group = "default"
+			in.Key = words[1]
+		} else if inputLen == 3 {
+			in.Group = words[1]
+			in.Key = words[2]
+		} else {
+			showError(errors.New("unexpected command,use delete to see the usage"))
+			return
+		}
+		out := cachepb.Response{}
+		if err := client.Delete(&in, &out); err != nil {
+			showError(err)
+		} else {
+			fmt.Println("delete success")
 		}
 	case "getKeys":
 		if inputLen != 2 {
@@ -136,6 +158,15 @@ func commandExplainer(input string) {
 		for _, v := range out.Key {
 			fmt.Println(v)
 		}
+	case "deleteGroup":
+		if inputLen != 2 {
+			showError(errors.New("unexpected command,use deleteGroups to see the usage"))
+		}
+		if err := client.DeleteGroup(words[1]); err != nil {
+			showError(err)
+			return
+		}
+		fmt.Println("OK")
 	default:
 		showError(errors.New("unknown command"))
 	}
@@ -168,18 +199,22 @@ func explainOneCommand(command string) bool {
 }
 
 // 解析帮助
-func explainUsage(word string) {
+func explainUsage(word string) bool {
 	switch word {
 	case "createGroup":
 		fmt.Println("createGroup -GroupName -MaxBytes")
+		return true
 	case "set":
 		fmt.Println("set -GroupName(default='default') -Key -Value")
+		return true
 	case "get":
 		fmt.Println("get -GroupName(default='default') -Key")
+		return true
 	default:
-		showError(errors.New("unknown command"))
+		return false
 	}
 }
+
 func showError(err error) {
 	fmt.Println("[Error]:", err.Error())
 }

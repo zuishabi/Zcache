@@ -77,6 +77,25 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = w.Write(d)
 		return
+	case "DeleteData":
+		groupName := q.Get("group")
+		group := GetGroup(groupName)
+		if group == nil {
+			http.Error(w, "no such group: "+groupName, http.StatusNotFound)
+			return
+		}
+		if !group.Delete(q.Get("key")) {
+			http.Error(w, "delete failed", http.StatusNotFound)
+		}
+		return
+	case "DeleteGroup":
+		groupName := q.Get("group")
+		if groupName == "default" {
+			http.Error(w, "can't delete group default", http.StatusForbidden)
+			return
+		}
+		DeleteGroup(groupName)
+		return
 	}
 	switch r.Method {
 	case "GET":
@@ -106,7 +125,7 @@ func (p *HTTPPool) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no such group: "+req.Group, http.StatusNotFound)
 			return
 		}
-		group.Set(req.Key, req.Value)
+		group.Set(req.Key, ByteView{b: req.Value})
 		body, err := proto.Marshal(&cachepb.Response{Value: []byte("create success")})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
